@@ -1,0 +1,40 @@
+(declare-fun p (Int) Bool)
+(edrat-literal 1 (exists ((y Int)) (and (p y) (> y 0) (< y 2))))
+a 1 0
+(edrat-literal 2 (forall ((z Int)) (! (=> (p z) (not (= z 1))) :pattern ((p z)))))
+a 2 0
+(declare-skolem 1 0 skolem-variable-0 Int)
+(edrat-literal 4 (and (p skolem-variable-0) (> skolem-variable-0 0) (< skolem-variable-0 2)))
+s -1 4 0
+(edrat-literal 5 (p skolem-variable-0))
+t b 5 -4 0
+(edrat-literal 6 (> skolem-variable-0 0))
+t b 6 -4 0
+(edrat-literal 7 (< skolem-variable-0 2))
+t b 7 -4 0
+4 0
+7 0
+6 0
+5 0
+(edrat-literal 10 (=> (p skolem-variable-0) (not (= skolem-variable-0 1))))
+q -2 10 0
+(edrat-literal 8 (or (not (p skolem-variable-0)) (not (= skolem-variable-0 1))))
+t b -10 8 0
+-2 8 0
+(edrat-literal 9 (= skolem-variable-0 1))
+t b -5 -9 -8 0
+t b -2 8 0
+8 0
+-9 0
+(edrat-literal 11 (< 1 skolem-variable-0))
+(edrat-literal 12 (> 1 skolem-variable-0))
+(edrat-literal 13 (= 1 skolem-variable-0))
+t lia 11 12 13 0
+t bg -13 9 0
+-13 0
+12 11 0
+t lia -12 -6 0
+-12 0
+11 0
+t lia -11 -7 0
+0

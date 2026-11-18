@@ -1,0 +1,5 @@
+(set-logic UFLIA)
+(declare-fun p (Int) Bool)
+(assert (exists ((y Int)) (and (p y) (> y 0) (< y 2))))
+(assert (forall ((z Int)) (! (=> (p z) (not (= z 1))) :pattern ((p z)))))
+(check-sat)

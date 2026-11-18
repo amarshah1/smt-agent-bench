@@ -1,0 +1,7 @@
+(declare-fun p (Int) Bool)
+(edrat-literal 1 (exists ((y Int)) (and (p y) (> y 0) (< y 2))))
+(declare-skolem 1 0 y Int)
+(edrat-literal 2 (and (p 1) (> 1 0) (< 1 2)))
+a 1 0
+s -1 2 0
+0

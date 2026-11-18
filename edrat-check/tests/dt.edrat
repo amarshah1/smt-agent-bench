@@ -1,0 +1,11 @@
+(declare-datatypes ((Lst 0)) (((nil) (cons (hd Int) (tl Lst)))))
+(declare-fun xs () Lst)
+(declare-fun ys () Lst)
+(edrat-literal 1 (= xs (cons 1 ys)))
+a 1 0
+(edrat-literal 2 ((_ is cons) xs))
+a -2 0
+(edrat-literal 4 ((_ is cons) (cons 1 ys)))
+t dt 4 0
+t uf 2 -1 -4 0
+0

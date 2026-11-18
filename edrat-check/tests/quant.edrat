@@ -1,0 +1,93 @@
+(declare-sort Vec 0)
+(declare-fun a () Vec)
+(declare-fun i () Int)
+(declare-fun index (Vec Int) Int)
+(declare-fun ub () Int)
+(declare-fun ub_new () Int)
+(edrat-literal 4 (forall ((j Int)) (! (=> (and (<= 0 j) (< j i)) (<= (index a j) ub)) :pattern ((index a j)))))
+a 4 0
+(edrat-literal 5 (= ub_new (ite (> (index a i) ub) (index a i) ub)))
+a 5 0
+(edrat-literal 6 (forall ((j Int)) (! (=> (and (<= 0 j) (< j (+ i 1))) (<= (index a j) ub_new)) :pattern ((index a j)))))
+a -6 0
+(edrat-literal 10 (> (index a i) ub))
+(edrat-literal 11 (= (ite (> (index a i) ub) (index a i) ub) (index a i)))
+(edrat-literal 9 (or (not (> (index a i) ub)) (= (ite (> (index a i) ub) (index a i) ub) (index a i))))
+t dt -10 11 -9 0
+(edrat-literal 13 (= (ite (> (index a i) ub) (index a i) ub) ub))
+(edrat-literal 12 (or (> (index a i) ub) (= (ite (> (index a i) ub) (index a i) ub) ub)))
+t dt 10 13 -12 0
+(edrat-literal 8 (and (or (not (> (index a i) ub)) (= (ite (> (index a i) ub) (index a i) ub) (index a i))) (or (> (index a i) ub) (= (ite (> (index a i) ub) (index a i) ub) ub))))
+t dt 9 -8 0
+t dt 12 -8 0
+t dt 8 0
+9 0
+12 0
+(declare-skolem 6 0 skolem-variable-0 Int)
+(edrat-literal 21 (not (=> (and (<= 0 skolem-variable-0) (< skolem-variable-0 (+ i 1))) (<= (index a skolem-variable-0) ub_new))))
+s 6 21 0
+(edrat-literal 16 (and (and (<= 0 skolem-variable-0) (< skolem-variable-0 (+ i 1))) (not (<= (index a skolem-variable-0) ub_new))))
+t b -21 16 0
+6 16 0
+(edrat-literal 18 (<= 0 skolem-variable-0))
+(edrat-literal 17 (and (<= 0 skolem-variable-0) (< skolem-variable-0 (+ i 1))))
+t b 18 -17 -16 0
+(edrat-literal 19 (< skolem-variable-0 (+ i 1)))
+t b 19 -17 -16 0
+t b 17 -16 0
+(edrat-literal 20 (<= (index a skolem-variable-0) ub_new))
+t b -20 -16 0
+16 0
+-20 0
+17 0
+19 0
+18 0
+(edrat-literal 32 (= (index a skolem-variable-0) ub_new))
+t lia -32 20 0
+-32 0
+t lia -32 20 0
+(edrat-literal 39 (=> (and (<= 0 skolem-variable-0) (< skolem-variable-0 i)) (<= (index a skolem-variable-0) ub)))
+q -4 39 0
+(edrat-literal 35 (or (or (not (<= 0 skolem-variable-0)) (not (< skolem-variable-0 i))) (<= (index a skolem-variable-0) ub)))
+t b -39 35 0
+-4 35 0
+(edrat-literal 37 (< skolem-variable-0 i))
+(edrat-literal 36 (or (not (<= 0 skolem-variable-0)) (not (< skolem-variable-0 i))))
+t b -18 -37 -36 0
+(edrat-literal 38 (<= (index a skolem-variable-0) ub))
+t b 36 38 -35 0
+t b -4 35 0
+35 0
+38 36 0
+-36 -37 0
+t uf 20 -13 -5 -38 0
+-38 -13 0
+(edrat-literal 40 (< i skolem-variable-0))
+(edrat-literal 41 (> i skolem-variable-0))
+(edrat-literal 42 (= i skolem-variable-0))
+t lia 40 41 42 0
+t lia -41 37 0
+t lia -40 -19 0
+-40 0
+t uf -11 -5 -42 32 0
+t lia -32 20 0
+-42 -11 0
+(edrat-literal 25 (<= (index a i) ub))
+t uf 20 -42 -13 -5 -25 0
+-25 -13 -42 0
+t lia 25 10 0
+t lia 25 10 0
+-13 0
+10 0
+11 0
+-42 0
+41 0
+37 0
+-36 0
+38 0
+t lia -32 20 0
+(edrat-literal 15 (= ub_new (index a i)))
+t lia -38 -15 -10 20 0
+-15 0
+t uf -11 -5 15 0
+0

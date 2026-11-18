@@ -1,0 +1,6 @@
+(set-logic QF_LIA)
+(declare-const i Int)
+(declare-const j Int)
+(assert (and (<= 0 i) (< i (+ j 1))))
+(assert (or (< j i) (> (* 2 i) (+ j j 1))))
+(check-sat)

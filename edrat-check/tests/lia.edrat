@@ -1,0 +1,17 @@
+(declare-fun i () Int)
+(declare-fun j () Int)
+(edrat-literal 3 (< i (+ j 1)))
+(edrat-literal 1 (and (<= 0 i) (< i (+ j 1))))
+a 3 -1 0
+a 1 0
+3 0
+(edrat-literal 5 (< j i))
+(edrat-literal 6 (> (* 2 i) (+ j j 1)))
+(edrat-literal 4 (or (< j i) (> (* 2 i) (+ j j 1))))
+a 5 6 -4 0
+a 4 0
+t lia -6 -3 0
+-6 0
+5 0
+t lia -5 -3 0
+0

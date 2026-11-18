@@ -1,0 +1,7 @@
+(declare-sort U 0)
+(declare-fun f (U) U)
+(declare-fun x () U)
+(edrat-literal 1 (= (f x) x))
+t uf 1 0
+a -1 0
+0
