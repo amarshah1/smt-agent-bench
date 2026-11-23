@@ -1,4 +1,4 @@
-# smt-verif-agent-bench
+# smt-agent-bench
 
 A small harness for one task: **have AI agents improve the open SMT solvers Sundance, cvc5 and Alt-Ergo
 until they match Z3 on program-verification queries**. The queries are the benchmark sets of

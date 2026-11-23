@@ -5,7 +5,7 @@
 #   scripts/docker.sh python3 scripts/bench.py run cvc5 --split dev
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-IMAGE=${BENCH_IMAGE:-smt-verif-agent-bench}
+IMAGE=${BENCH_IMAGE:-smt-agent-bench}
 docker image inspect "$IMAGE" >/dev/null 2>&1 || docker build -q -t "$IMAGE" "$ROOT" >/dev/null
 mkdir -p "$ROOT/tools/home"
 tty=(); [ -t 0 ] && tty=(-it)
