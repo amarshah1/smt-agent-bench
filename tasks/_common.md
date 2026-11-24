@@ -6,11 +6,11 @@ full harness details.
 
 ## Objective (what is scored)
 
-A fixed set of program-verification queries (from verified Verus, Dafny, and F\* projects) is run through
-{{SOLVER}} and through **Z3** (the reference). Your score is the **mean gap to Z3, in percentage points, over
-the four query sets** (Verus, held-out, Dafny, F\*) — the share of queries Z3 solves minus the share
-{{SOLVER}} solves, averaged. **Lower is better; 0 means as good as Z3.** Maximize the fraction of queries
-{{SOLVER}} solves within the time limit.
+A fixed set of program-verification queries from verified Verus projects is run through {{SOLVER}} and
+through **Z3** (the reference). The scored set is the **Verus dev split**: the 259 queries listed in
+`splits/verus-dev.txt` (10% of each project). Your score is the **gap to Z3 in percentage points**: the share
+of these queries that Z3 solves minus the share that {{SOLVER}} solves. **Lower is better; 0 means as good as
+Z3.** Maximize the fraction of queries {{SOLVER}} solves within the time limit.
 
 - The **unmodified solver you start from is the 0 anchor**; **Z3 is the reference** (its internals are not
   provided, and you must not call or link it). Your job is to move {{SOLVER}} toward Z3.
@@ -30,8 +30,9 @@ the four query sets** (Verus, held-out, Dafny, F\*) — the share of queries Z3 
 4. **No benchmark-specific hacks.** Do not recognize queries by file name, hash, prelude text, or project
    symbol names, and do not store answers or proofs. Heuristics that use the *structure* verifiers produce
    (patterns, `fuel` encodings, `has_type` guards, Boogie/F\* idioms) are fine if they stay correct on *any*
-   input. Improvements must generalize: the final score is measured on a **held-out set and queries you
-   never see**, which are **not on disk during your run** — you cannot tune to them, only to the dev split.
+   input. Improvements must generalize: the final grade also runs the **holdout split** (the other 90% of the
+   Verus queries, 2,317 files) to check that your changes generalize. Do not look at, run, or tune on those
+   queries; work only with `--split dev`.
 5. **The command line is fixed** (`CONFIGS` in `scripts/bench.py`). Change defaults *inside* the solver, not
    the flags.
 6. **Keep the solver's own tests passing:** `{{TEST_CMD}}`.
@@ -41,7 +42,7 @@ the four query sets** (Verus, held-out, Dafny, F\*) — the share of queries Z3 
 - Rebuild after each change: `{{BUILD_CMD}}` (the `bin/{{BIN}}` symlink then points at your new binary). Do
   **not** run `scripts/fetch_solvers.sh` — it is referee code and needs the network.
 - Measure yourself on the fast **dev** split. This is **advisory only**: the authoritative grade is re-run
-  by the harness after you stop, and it includes the held-out set you cannot see.
+  by the harness after you stop, and it also checks the holdout split.
 
   ```sh
   python3 scripts/bench.py run {{CONFIG}} --split dev --out results/selfcheck --rerun

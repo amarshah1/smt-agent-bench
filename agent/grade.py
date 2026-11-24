@@ -12,8 +12,8 @@ Verdict ladder (mapped to this benchmark's rules, see TASK.md):
   L1 build     scripts/fetch_solvers.sh <solver> succeeds
   L2 tests     the solver's own test suite passes (optional; --tests)
   L3 valid     the dev run has 0 wrong answers and clean canaries (soundness gate)
-  L4 gap       mean gap-to-Z3 over the four sets (the headline score; lower is better)
-  L5 heldout   held-out generalizes + canaries clean (optional; grade --split full)
+  L4 gap       gap to Z3 on the scored sets (now: Verus dev, 259 queries; lower is better)
+  L5 holdout   the other 90% of Verus generalizes + canaries clean (optional; grade --split holdout)
 
 A run that fails L3 is INVALID regardless of its gap (an unsound answer scores 0).
 """
@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAIN_SETS = ['verus', 'heldout', 'dafny', 'fstar']
+SCORED_SETS = ['verus']     # only the Verus development set is scored for now (see splits/)
 
 
 def _run(cmd, **kw):
@@ -83,7 +83,7 @@ def measure(solver, config, *, split='dev', timeout=60, out_dir, jobs=None, sets
     if not os.path.isdir(ref):
         raise RuntimeError('missing Z3 reference %s — run: python3 scripts/bench.py run z3 --split %s'
                            % (ref, split))
-    sets = sets or (MAIN_SETS + ['canaries'])
+    sets = sets or (SCORED_SETS + ['canaries'])
     cmd = [sys.executable, os.path.join('scripts', 'bench.py'), 'run', config,
            '--split', split, '--timeout', str(timeout), '--out', out_dir, '--rerun',
            '--sets', ','.join(sets)]
@@ -93,7 +93,7 @@ def measure(solver, config, *, split='dev', timeout=60, out_dir, jobs=None, sets
     row = _score_json(out_dir, ref)
     gaps = []
     per_set = {}
-    for s in MAIN_SETS:
+    for s in SCORED_SETS:
         st = row['sets'].get(s)
         if not st or not st.get('n'):
             continue
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='Authoritatively grade a solver (rebuild + referee).')
     ap.add_argument('solver', choices=['sundance', 'cvc5', 'alt-ergo'])
     ap.add_argument('--config', help='bench.py config (default: same as solver)')
-    ap.add_argument('--split', choices=('dev', 'full'), default='dev')
+    ap.add_argument('--split', choices=('dev', 'holdout', 'full'), default='dev')
     ap.add_argument('--timeout', type=int, default=60)
     ap.add_argument('--out', default=None, help='output dir (default: results/grade-<solver>-<split>)')
     ap.add_argument('--jobs', type=int, default=None)

@@ -9,8 +9,9 @@ You are working on **one** of these solvers, chosen by whoever started you:
 | Alt-Ergo | `solvers/alt-ergo` | OCaml | `alt-ergo`: no proofs |
 
 The queries come from verified Rust (Verus), Dafny and F\* projects. Z3 solves almost all of them, partly
-because the verifiers were tuned for Z3. **Goal: close the gap between your solver and Z3 on all four sets
-(Verus, Verus held-out, Dafny, F\*) without breaking soundness.**
+because the verifiers were tuned for Z3. **Goal: close the gap between your solver and Z3 on the Verus queries
+without breaking soundness.** For now only the Verus development set is scored: you work on its `dev` split
+(259 queries, `splits/verus-dev.txt`), and the other 2,317 queries (`--split holdout`) check generalization.
 
 ## Setup
 
@@ -43,7 +44,7 @@ prints the query paths, so you can run the solver on single files directly.
    names of a specific project, and do not store answers or proofs. Heuristics that use the *structure*
    that verifiers produce (patterns, `fuel` encodings, `has_type` guards, Boogie/F\* idioms) are fine, as
    long as they would still be correct on any input. Improvements must generalize: the final score
-   includes the held-out set and may include queries you have never seen.
+   includes the holdout split, which you must not tune on, and may include queries you have never seen.
 5. **The command line is fixed** (see `CONFIGS` in `scripts/bench.py`). Change defaults inside the solver
    instead of adding flags.
 6. **Keep the solver's own tests passing**: `cargo test --release` for Sundance, `ctest` / the regression
@@ -51,8 +52,9 @@ prints the query paths, so you can run the solver on single files directly.
 
 ## Score
 
-The final evaluation runs `bench.py run <config> --split full --timeout 60` and `bench.py score`. The score
-is the **mean gap to Z3, in percentage points, over the four sets** (lower is better; 0 means as good as Z3).
+The final evaluation runs `bench.py run <config> --split dev --timeout 60` and `bench.py score`. The score is
+the **gap to Z3 in percentage points on the Verus dev split** (lower is better; 0 means as good as Z3). The
+same run on `--split holdout` must not regress.
 The share solved within 1 s and 10 s, and the solver's diff (simpler is better), break ties.
 
 ## Deliverables

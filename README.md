@@ -26,7 +26,7 @@ this repo. The paper used Valido, which is not open source yet.
 ## Quick start
 
 ```sh
-scripts/fetch_benchmarks.sh --sample 20     # or no flag: everything (3 GB download, 77 GB on disk)
+scripts/fetch_benchmarks.sh --only verus --only canaries   # the scored set (2.3 GB); no flags: all sets (77 GB)
 scripts/fetch_solvers.sh                    # clone and build all solvers and checkers into solvers/, tools/, bin/
 edrat-check/tests/run_tests.sh              # checker self-test
 
@@ -61,8 +61,11 @@ configurations follow the paper:
 
 - Time limit: 60 s per query (`--timeout`). The scores report the share of queries solved within 1 s,
   10 s and the limit, and the gap to Z3 in percentage points.
-- Splits: `--split dev` is a fixed 10% sample of every set, for iteration. `--split full` is the whole set,
-  and is what counts.
+- **What is scored (for now): the Verus development set only.** `--split dev` is the 259 queries in
+  `splits/verus-dev.txt` (10% of each project, chosen by hash of the path). It is what agents work on and
+  what the score uses. `--split holdout` is the other 2,317 Verus queries; it checks that improvements
+  generalize, and agents should not tune on it. The held-out Verus, Dafny and F\* sets are not scored
+  right now, but `--sets heldout,dafny,fstar` still runs them. The canaries always run in full.
 - Soundness: a `sat` answer on a benchmark (all of them are unsat: they come from verified projects), or an
   `unsat` answer on a canary, is a wrong answer, and it **invalidates the run**. Proofs that a checker
   *rejects* are reported separately from proofs it cannot parse or check in time.
@@ -87,10 +90,21 @@ The newest versions start in a different place:
 - **Sundance `main`** (since PR #251) rejects every input that contains a `Real`-sorted term, including
   unused declarations in a prelude. This rejects nearly all held-out, Dafny and F\* queries
   ("unsupported theory: real arithmetic"). The paper's commit was `c175059`.
-- **Logos** cannot parse the `(define f () (lambda ...))` commands that cvc5 prints for `define-fun`s with
-  arguments, which Verus and F\* queries use. **Ethos** (the pinned version) rejects the sort name `Type`,
-  which Verus declares. So, for now, cvc5's Verus proofs cannot be checked. Changing how cvc5 prints its
-  proofs so that the checkers accept them is a legitimate improvement. Changing the checkers is not.
+- **cvc5 proofs on Verus are mostly uncheckable.** On the dev split, cvc5 answers `unsat` on 232 of 259
+  queries, but 219 of those proofs cannot be checked, so only 13 (5.0%) count. Two causes:
+  1. Logos has no representation for `lambda`. cvc5 keeps every `define-fun` with arguments as a lambda term
+     in the proof. It prints the term as `(define f () (let ((_let_1 (@var "c" T))) (lambda ...)))` and uses
+     it in later steps, for example `(= f @t422)` and `(_ @t422 x)`. The print form comes from
+     `src/smt/print_benchmark.cpp`: the proof converter rewrites the lambda before the printer splits off its
+     parameters.
+  2. Ethos, the fallback, rejects the sort name `Type` (reserved in Eunoia), which Verus declares. It also
+     fails on the `let`-wrapped `define`.
+
+  Experiment: I rewrote the 219 inputs with every parameterized `define-fun` inlined and `Type` renamed
+  (both are semantics-preserving). On the rewritten inputs, all 219 proofs check: Logos accepts 213, and
+  Ethos accepts the other 6, which took Logos more than 300 s (one took 486 s). So the gap is in what cvc5
+  emits, not in its reasoning. The fix belongs in cvc5: expand macros before proof production, and print
+  or rename reserved symbols. The checkers stay frozen.
 - Z3 5.x has a built-in `List` sort, so queries that declare `List` fail in Z3. The eDRAT checker then falls
   back to RUP for the affected lemmas.
 - Alt-Ergo `next`/2.6.x is under the **OCamlPro Non-Commercial License**, not open source. Check that the

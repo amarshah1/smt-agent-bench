@@ -9,9 +9,11 @@
 
 SOLVER: z3 (reference), sundance, cvc5, alt-ergo, or one of the variants listed in CONFIGS below.
 Sets: verus (2,576 = development set without the SplinterDB copies), heldout (4,086), dafny (11,674),
-fstar (3,195), canaries (satisfiable soundness checks). The default is all of them.
-Splits: `dev` is a fixed 10% sample of each set (by hash of the path), for quick iterations. `full` is
-everything, and is what final scores use.
+fstar (3,195), canaries (satisfiable soundness checks). Only verus is scored for now, so the default is
+verus and the canaries; the other sets run only when you pass them to --sets.
+Splits: for verus, `dev` is the 259 queries in splits/verus-dev.txt (10% of each project) and `holdout` is
+the other 2,317. For the other sets, `dev` is a 10% sample by hash of the path and `holdout` is the rest.
+`full` is everything. The canaries are always run in full.
 
 A query counts as solved if the solver answers `unsat` within the time limit, and, for configs that
 produce proofs, the proof checker accepts the proof (edrat-check for Sundance, Logos for cvc5). A `sat`
@@ -78,8 +80,23 @@ VERDICT_RE = re.compile(r'^[ \t]*(unsat|sat|unknown|timeout)[ \t\r]*$', re.M)
 
 
 # ------------------------------------------------------------------------------------------ queries
-def in_split(rel, split):
-    return split == 'full' or int(hashlib.sha1(rel.encode()).hexdigest()[:8], 16) % 10 == 0
+SCORED_SETS = ['verus']
+SPLITS = ('dev', 'holdout', 'full')
+SPLIT_FILES = {'verus': os.path.join(ROOT, 'splits', 'verus-dev.txt')}
+_dev_lists = {}
+
+
+def in_split(name, rel, split):
+    if split == 'full' or name == 'canaries':
+        return True
+    if name in SPLIT_FILES:
+        if name not in _dev_lists:
+            with open(SPLIT_FILES[name]) as f:
+                _dev_lists[name] = set(l.strip() for l in f if l.strip())
+        dev = rel in _dev_lists[name]
+    else:
+        dev = int(hashlib.sha1(rel.encode()).hexdigest()[:8], 16) % 10 == 0
+    return dev if split == 'dev' else not dev
 
 
 def list_set(name, split):
@@ -90,7 +107,7 @@ def list_set(name, split):
         for f in files:
             if f.endswith('.smt2'):
                 rel = os.path.relpath(os.path.join(d, f), base)
-                if (keep is None or keep(rel)) and in_split(rel, split):
+                if (keep is None or keep(rel)) and in_split(name, rel, split):
                     out.append(rel)
     return base, sorted(out)
 
@@ -218,13 +235,14 @@ def check_proof(cfg, query, proof, timeout, work):
             note = m.group(1)
         return verdict or 'ERROR', round(secs, 3), note or (err.strip()[-200:] if not verdict else '')
     if checker == 'logos':
-        out, err, secs, rc = run_limited([b('logos'), proof], timeout)
-        if rc is None:
-            return 'TIMEOUT', round(secs, 3), ''
+        # Logos is slow on large proofs: give it 2/3 of the budget and Ethos the rest
+        out, err, secs, rc = run_limited([b('logos'), proof], timeout * 2 / 3)
         word = out.strip().split('\n')[-1].strip() if out.strip() else ''
         verdict = {'correct': 'VERIFIED', 'incorrect': 'NOT VERIFIED', 'incomplete': 'INCOMPLETE'}.get(word, 'ERROR')
+        if rc is None:
+            verdict = 'TIMEOUT'
         note = err.strip()[-200:].replace('\n', ' ') if verdict != 'VERIFIED' else ''
-        if verdict in ('ERROR', 'INCOMPLETE') and os.path.exists(b('ethos')) and os.path.isdir(CPC_SIG):
+        if verdict in ('ERROR', 'INCOMPLETE', 'TIMEOUT') and os.path.exists(b('ethos')) and os.path.isdir(CPC_SIG):
             # Logos cannot parse this proof (or it is outside Logos's SMT-LIB model): fall back to Ethos
             ev, es, enote = check_ethos(proof, max(1, timeout - secs), work)
             return ev, round(secs + es, 3), 'logos: %s %s; ethos: %s' % (verdict, note, enote)
@@ -486,8 +504,8 @@ def main():
     sub = ap.add_subparsers(dest='cmd')
     r = sub.add_parser('run')
     r.add_argument('solver')
-    r.add_argument('--sets', default=','.join(MAIN_SETS + ['canaries']))
-    r.add_argument('--split', choices=('dev', 'full'), default='dev')
+    r.add_argument('--sets', default=','.join(SCORED_SETS + ['canaries']))
+    r.add_argument('--split', choices=SPLITS, default='dev')
     r.add_argument('--timeout', type=int, default=60)
     r.add_argument('--check-timeout', type=int, default=600)
     r.add_argument('-j', '--jobs', type=int, default=max(1, (os.cpu_count() or 2) * 3 // 4))
@@ -506,8 +524,8 @@ def main():
     c.add_argument('regress')
     c.add_argument('out')
     l = sub.add_parser('list')
-    l.add_argument('--sets', default=','.join(MAIN_SETS))
-    l.add_argument('--split', choices=('dev', 'full'), default='dev')
+    l.add_argument('--sets', default=','.join(SCORED_SETS))
+    l.add_argument('--split', choices=SPLITS, default='dev')
     a = ap.parse_args()
     if a.cmd == 'run':
         cmd_run(a)

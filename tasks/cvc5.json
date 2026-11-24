@@ -7,18 +7,30 @@
   "test_cmd": "ctest --test-dir build -j4  (the regression suite)",
   "solved_condition": "A query counts as solved only when cvc5 answers `unsat` **and emits a CPC proof that the checker Logos accepts** (`correct`), or that Ethos accepts as a fallback when Logos cannot parse it. An `unsat` without an accepted proof does not count. Changing *how cvc5 prints* its proofs so a checker accepts them is a legitimate improvement; changing the checkers is not.",
   "canary": "SMT-AGENT-BENCH-CANARY c1ea9bce-b17d-4582-9820-9a4542f6498c",
-  "scored_sets": ["verus", "heldout", "dafny", "fstar"],
-  "metric": "mean gap to Z3 in percentage points over the four sets (lower is better; 0 = as good as Z3)",
+  "scored_sets": [
+    "verus"
+  ],
+  "metric": "gap to Z3 in percentage points on the Verus dev split (splits/verus-dev.txt, 259 queries; lower is better; 0 = as good as Z3)",
   "anchors": {
     "zero": "the unmodified solver at solver_base_commit (the starting point)",
     "one": "Z3 with the verifier's options (the reference; its internals are not provided)"
   },
-  "writable": ["solvers/cvc5", "results"],
-  "frozen": ["scripts", "edrat-check", "config.env", "benchmarks", "tools", "bin/z3"],
+  "writable": [
+    "solvers/cvc5",
+    "results"
+  ],
+  "frozen": [
+    "scripts",
+    "edrat-check",
+    "config.env",
+    "benchmarks",
+    "tools",
+    "bin/z3"
+  ],
   "baseline": {
-    "dev_mean_gap_pp": 75.0,
+    "dev_mean_gap_pp": 95.0,
     "measured": "2026-11-24",
-    "ref": "cvc5 1.4.3.dev+main",
-    "note": "on the --sample 20 dev split (~2 queries per set); sample-sensitive, directional only. On this sample verus and fstar show proof_unchecked=2 (cvc5 emits CPC proofs Logos/Ethos cannot parse) — the documented checker gap. Re-measure larger for a stable baseline."
+    "split": "dev (splits/verus-dev.txt, 259 Verus queries), 60 s, Z3 5.3.3 = 100.0%",
+    "note": "only 5.0% counted: cvc5 answers unsat on 89.6% (232/259) but 219 proofs are unchecked (define-fun lambdas / sort `Type`; see README)"
   }
 }

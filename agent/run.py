@@ -120,7 +120,7 @@ def main():
     ap.add_argument('--auth', default='auto', choices=['auto', 'api-key', 'subscription', 'bedrock'])
     ap.add_argument('--network', default='off', help='off | loopback | on')
     ap.add_argument('--timeout', type=int, default=3600, help='wall-clock budget in seconds (the stop criterion)')
-    ap.add_argument('--split', choices=('dev', 'full'), default='dev', help='grading split')
+    ap.add_argument('--split', choices=('dev', 'holdout', 'full'), default='dev', help='grading split')
     ap.add_argument('--grade-timeout', type=int, default=60, help='per-query timeout when grading')
     ap.add_argument('--tests', action='store_true', help='also run the solver test suite (L2)')
     ap.add_argument('--no-sandbox', action='store_true', help='DANGER: run the agent unconfined')
