@@ -51,6 +51,6 @@ line. Use `-v` and `--keep DIR` to see the generated CNF, DRAT, and oracle queri
 - Only top-level quantified literals can be instantiated or Skolemized; that is how Sundance uses them.
   `match`, `lambda`, and `define-fun-rec` bodies are treated as opaque terms.
 - With multiple `check-sat` commands, it uses the assertions in scope at the first one.
-- On 536 Sundance proofs sampled from the four benchmark sets (Verus, held-out, Dafny, F\*), it accepted
+- On 536 Sundance proofs sampled from the four benchmark sets (Verus, Verus additional, Dafny, F\*), it accepted
   all of them (median 0.2 s, 95th percentile 3.4 s; with Z3 4.13 and 5.3 as the oracle). It rejected proofs with flipped literals, weakened literal definitions,
   stale Skolem constants, and inputs with the goal removed (see `tests/run_tests.sh`).

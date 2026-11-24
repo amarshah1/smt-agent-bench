@@ -11,9 +11,10 @@ counts.
 Verdict ladder (mapped to this benchmark's rules, see TASK.md):
   L1 build     scripts/fetch_solvers.sh <solver> succeeds
   L2 tests     the solver's own test suite passes (optional; --tests)
-  L3 valid     the dev run has 0 wrong answers and clean canaries (soundness gate)
-  L4 gap       gap to Z3 on the scored sets (now: Verus dev, 259 queries; lower is better)
-  L5 holdout   the other 90% of Verus generalizes + canaries clean (optional; grade --split holdout)
+  L3 valid     0 wrong answers on dev, holdout and the canaries (soundness gate)
+  L4 dev       gap to Z3 on the dev split (259 Verus queries the agent can see)
+  L5 holdout   gap to Z3 on the holdout split (the other 2,317 Verus queries, never visible to the
+               agent). This is the headline score: score_gap_pp. Lower is better.
 
 A run that fails L3 is INVALID regardless of its gap (an unsound answer scores 0).
 """
@@ -24,6 +25,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCORED_SETS = ['verus']     # only the Verus development set is scored for now (see splits/)
+# Grader-only data (the Z3 holdout reference, holdout runs). The agent sandbox denies this directory.
+REFEREE = os.path.join(ROOT, '.referee')
 
 
 def _run(cmd, **kw):
@@ -76,14 +79,28 @@ def _score_json(run_out, ref):
         raise RuntimeError('bench.py score failed:\n' + r.stdout[-1200:])
 
 
+def reference(split, timeout, jobs=None):
+    """The Z3 reference run for SPLIT, created if missing. Dev lives in results/ (the agent may use it);
+    holdout lives in .referee/ (the agent cannot see it)."""
+    base = os.path.join(ROOT, 'results') if split == 'dev' else REFEREE
+    ref = os.path.join(base, 'z3-%s-t%d' % (split, timeout))
+    if not os.path.exists(os.path.join(ref, 'verus.csv')):
+        os.makedirs(ref, exist_ok=True)
+        cmd = [sys.executable, os.path.join('scripts', 'bench.py'), 'run', 'z3', '--split', split,
+               '--timeout', str(timeout), '--out', ref, '--sets', ','.join(SCORED_SETS + (['canaries'] if split == 'dev' else []))]
+        if jobs:
+            cmd += ['-j', str(jobs)]
+        r = _run(cmd)
+        if r.returncode != 0:
+            raise RuntimeError('Z3 reference run failed:\n' + r.stdout[-1200:])
+    return ref
+
+
 def measure(solver, config, *, split='dev', timeout=60, out_dir, jobs=None, sets=None):
-    """L3/L4: run the solver with the frozen referee and score against Z3. Returns
-    the per-set stats, the mean gap-to-Z3, and the soundness verdict."""
-    ref = os.path.join(ROOT, 'results', 'z3-%s-t%d' % (split, timeout))
-    if not os.path.isdir(ref):
-        raise RuntimeError('missing Z3 reference %s — run: python3 scripts/bench.py run z3 --split %s'
-                           % (ref, split))
-    sets = sets or (SCORED_SETS + ['canaries'])
+    """Run the solver on SPLIT with the frozen referee and score it against Z3. Returns the
+    per-set stats, the gap to Z3, and the soundness verdict. The canaries run with dev only."""
+    ref = reference(split, timeout, jobs)
+    sets = sets or (SCORED_SETS + (['canaries'] if split == 'dev' else []))
     cmd = [sys.executable, os.path.join('scripts', 'bench.py'), 'run', config,
            '--split', split, '--timeout', str(timeout), '--out', out_dir, '--rerun',
            '--sets', ','.join(sets)]
@@ -113,10 +130,11 @@ def measure(solver, config, *, split='dev', timeout=60, out_dir, jobs=None, sets
             'solver_run_tail': run.stdout[-600:]}
 
 
-def grade(solver, config, *, split='dev', timeout=60, out_dir, jobs=None,
-          do_build=True, do_tests=False, baseline_gap=None):
-    """Full L1->L4(+L5) grade. Returns a verdict dict suitable for grade.json."""
-    v = {'solver': solver, 'config': config, 'split': split, 'timeout': timeout}
+def grade(solver, config, *, timeout=60, out_dir, jobs=None, do_build=True, do_tests=False,
+          holdout=True, baseline=None):
+    """Full grade: build (L1), tests (L2), soundness (L3), dev gap (L4), holdout gap (L5).
+    Returns a verdict dict suitable for grade.json."""
+    v = {'solver': solver, 'config': config, 'timeout': timeout}
     if do_build:
         v['L1_build'] = rebuild(solver, os.path.join(out_dir, 'build.log'), jobs)
         if not v['L1_build']['ok']:
@@ -124,18 +142,26 @@ def grade(solver, config, *, split='dev', timeout=60, out_dir, jobs=None,
             return v
     if do_tests:
         v['L2_tests'] = run_tests(solver, os.path.join(out_dir, 'tests.log'))
-    m = measure(solver, config, split=split, timeout=timeout,
-                out_dir=os.path.join(out_dir, 'eval'), jobs=jobs)
-    v['L3_valid'] = m['valid']
-    v['L4_mean_gap_pp'] = m['mean_gap_pp']
-    v['per_set'] = m['per_set']
-    v['canaries'] = m['canaries']
-    v['wrong_answers'] = m['wrong']
-    if baseline_gap is not None and m['mean_gap_pp'] is not None:
-        v['baseline_gap_pp'] = baseline_gap
-        v['improvement_pp'] = round(baseline_gap - m['mean_gap_pp'], 2)   # positive = better
-    v['verdict'] = ('INVALID' if not m['valid'] else
-                    'OK' if m['mean_gap_pp'] is not None else 'NO_SCORE')
+    runs = {'dev': measure(solver, config, split='dev', timeout=timeout,
+                           out_dir=os.path.join(out_dir, 'dev'), jobs=jobs)}
+    if holdout:
+        runs['holdout'] = measure(solver, config, split='holdout', timeout=timeout,
+                                  out_dir=os.path.join(out_dir, 'holdout'), jobs=jobs)
+    for split, m in runs.items():
+        v[split] = {k: m[k] for k in ('mean_gap_pp', 'per_set', 'wrong', 'valid')}
+    v['canaries'] = runs['dev']['canaries']
+    v['wrong_answers'] = sum(m['wrong'] for m in runs.values())
+    v['L3_valid'] = all(m['valid'] for m in runs.values())
+    v['L4_dev_gap_pp'] = runs['dev']['mean_gap_pp']
+    v['L5_holdout_gap_pp'] = runs['holdout']['mean_gap_pp'] if holdout else None
+    v['score_gap_pp'] = v['L5_holdout_gap_pp'] if holdout else v['L4_dev_gap_pp']   # the headline
+    v['score_split'] = 'holdout' if holdout else 'dev'
+    base = (baseline or {}).get('%s_mean_gap_pp' % v['score_split'])
+    if base is not None and v['score_gap_pp'] is not None:
+        v['baseline_gap_pp'] = base
+        v['improvement_pp'] = round(base - v['score_gap_pp'], 2)   # positive = better
+    v['verdict'] = ('INVALID' if not v['L3_valid'] else
+                    'OK' if v['score_gap_pp'] is not None else 'NO_SCORE')
     return v
 
 
@@ -144,16 +170,16 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='Authoritatively grade a solver (rebuild + referee).')
     ap.add_argument('solver', choices=['sundance', 'cvc5', 'alt-ergo'])
     ap.add_argument('--config', help='bench.py config (default: same as solver)')
-    ap.add_argument('--split', choices=('dev', 'holdout', 'full'), default='dev')
     ap.add_argument('--timeout', type=int, default=60)
-    ap.add_argument('--out', default=None, help='output dir (default: results/grade-<solver>-<split>)')
+    ap.add_argument('--out', default=None, help='output dir (default: .referee/grade-<solver>)')
     ap.add_argument('--jobs', type=int, default=None)
     ap.add_argument('--no-build', action='store_true')
     ap.add_argument('--tests', action='store_true')
+    ap.add_argument('--no-holdout', action='store_true', help='dev only (quick; not a final grade)')
     a = ap.parse_args()
-    out = a.out or os.path.join(ROOT, 'results', 'grade-%s-%s' % (a.solver, a.split))
-    os.makedirs(os.path.join(out, 'eval'), exist_ok=True)
-    verdict = grade(a.solver, a.config or a.solver, split=a.split, timeout=a.timeout,
-                    out_dir=out, jobs=a.jobs, do_build=not a.no_build, do_tests=a.tests)
+    out = a.out or os.path.join(REFEREE, 'grade-%s' % a.solver)
+    os.makedirs(out, exist_ok=True)
+    verdict = grade(a.solver, a.config or a.solver, timeout=a.timeout, out_dir=out, jobs=a.jobs,
+                    do_build=not a.no_build, do_tests=a.tests, holdout=not a.no_holdout)
     open(os.path.join(out, 'grade.json'), 'w').write(json.dumps(verdict, indent=2))
     print(json.dumps(verdict, indent=2))

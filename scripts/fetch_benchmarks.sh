@@ -4,11 +4,11 @@
 #   benchmarks/verus_benchmarks/UFDTLIA/20241211-verus   Verus development set: 3,763 files. The 1,187
 #                                                        anvil/splinterdb-smt-* copies of splinterdb/* are skipped
 #                                                        by bench.py, which leaves 2,576.
-#   benchmarks/sundance_heldout_benchmarks/UFDTLIA       Verus held-out set: 4,086 files
+#   benchmarks/sundance_heldout_benchmarks/UFDTLIA       Verus additional set (the paper's held-out set): 4,086
 #   benchmarks/dafny_fstar_benchmarks/UFLIA              Mariposa Dafny (d_*, 11,674) and F* (fs_*, 3,195) queries
 #   benchmarks/canaries                                  satisfiable queries from cvc5's regression suite
 #
-# usage: scripts/fetch_benchmarks.sh [--sample N] [--only verus|heldout|dafny_fstar|canaries]...
+# usage: scripts/fetch_benchmarks.sh [--sample N] [--only verus|verus-additional|dafny_fstar|canaries]...
 #   --sample N   only N random files per set (fixed seed), for trying things out. It downloads the
 #                two smallest Dafny/F* tarballs (about 0.3 GB) and extracts only the sampled files.
 # Full download: about 3 GB, and about 77 GB on disk. A rerun skips whatever is already there.
@@ -56,7 +56,7 @@ git_set() {  # name url commit folder expected
   echo "$name: $n files @ ${commit:0:12} (OK)"
 }
 want verus && git_set verus "$VERUS_REPO" "$VERUS_COMMIT" UFDTLIA/20241211-verus 3763
-want heldout && git_set heldout "$HELDOUT_REPO" "$HELDOUT_COMMIT" UFDTLIA 4086
+want verus-additional && git_set verus-additional "$VERUS_ADDITIONAL_REPO" "$VERUS_ADDITIONAL_COMMIT" UFDTLIA 4086
 
 if want dafny_fstar; then
   d=$B/dafny_fstar_benchmarks; mkdir -p "$d/.tarballs"

@@ -9,7 +9,7 @@ This repo contains no benchmarks and no solver code. Its scripts pull them from 
 | what | source | version |
 |---|---|---|
 | Verus development set (2,576 after deduplication) | [amarshah1/verus_benchmarks](https://github.com/amarshah1/verus_benchmarks) | pinned to the paper's commit |
-| Verus held-out set (4,086) | [amarshah1/sundance_heldout_benchmarks](https://github.com/amarshah1/sundance_heldout_benchmarks) | pinned |
+| Verus additional set (4,086; the paper's held-out set) | [amarshah1/sundance_heldout_benchmarks](https://github.com/amarshah1/sundance_heldout_benchmarks) | pinned |
 | Dafny (11,674) and F\* (3,195) queries, from Mariposa | [amarshah1/dafny_fstar_benchmarks](https://github.com/amarshah1/dafny_fstar_benchmarks) release v1.0 | pinned (sha256) |
 | soundness canaries (satisfiable queries) | cvc5's regression suite | pinned tag |
 | **Sundance** | [yaspar-org/Sundance-SMT](https://github.com/yaspar-org/Sundance-SMT) | `main`, built from source |
@@ -62,10 +62,11 @@ configurations follow the paper:
 - Time limit: 60 s per query (`--timeout`). The scores report the share of queries solved within 1 s,
   10 s and the limit, and the gap to Z3 in percentage points.
 - **What is scored (for now): the Verus development set only.** `--split dev` is the 259 queries in
-  `splits/verus-dev.txt` (10% of each project, chosen by hash of the path). It is what agents work on and
-  what the score uses. `--split holdout` is the other 2,317 Verus queries; it checks that improvements
-  generalize, and agents should not tune on it. The held-out Verus, Dafny and F\* sets are not scored
-  right now, but `--sets heldout,dafny,fstar` still runs them. The canaries always run in full.
+  `splits/verus-dev.txt` (10% of each project, chosen by hash of the path); agents work on it.
+  `--split holdout` is the other 2,317 Verus queries. The agent sandbox does not show them, and the grade
+  (`python3 -m agent.grade`) scores the **holdout gap**, with the dev gap reported next to it. The additional
+  Verus set (the paper's held-out set), Dafny and F\* are not scored right now, but
+  `--sets verus-additional,dafny,fstar` still runs them. The canaries always run in full.
 - Soundness: a `sat` answer on a benchmark (all of them are unsat: they come from verified projects), or an
   `unsat` answer on a canary, is a wrong answer, and it **invalidates the run**. Proofs that a checker
   *rejects* are reported separately from proofs it cannot parse or check in time.
@@ -78,7 +79,7 @@ The task for the agents is in [TASK.md](TASK.md).
 
 The paper's numbers (60 s; % of queries solved):
 
-| | Verus | held-out | Dafny | F\* |
+| | Verus | Verus additional | Dafny | F\* |
 |---|---:|---:|---:|---:|
 | Z3, verifier options | 99.8 | 99.8 | 98.0 | 97.8 |
 | Sundance (proofs) | 83.0 | 90.2 | 73.7 | 56.7 |
@@ -88,7 +89,7 @@ The paper's numbers (60 s; % of queries solved):
 The newest versions start in a different place:
 
 - **Sundance `main`** (since PR #251) rejects every input that contains a `Real`-sorted term, including
-  unused declarations in a prelude. This rejects nearly all held-out, Dafny and F\* queries
+  unused declarations in a prelude. This rejects nearly all Verus-additional, Dafny and F\* queries
   ("unsupported theory: real arithmetic"). The paper's commit was `c175059`.
 - **Logos cannot check most of cvc5's Verus proofs; Ethos can.** On the dev split, cvc5 answers `unsat` on
   232 of 259 queries. Logos accepts 13 of those proofs, and Ethos (the fallback) accepts the other 219, so

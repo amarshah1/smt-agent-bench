@@ -89,6 +89,8 @@ def _seatbelt_profile(home, allow_ro, allow_rw, deny):
     lines += [')']
     if allow_ro:
         lines += ['(allow file-read*', subpaths(allow_ro), ')']
+        # read-only also outside home (e.g. a repo under /local); the rw roots below re-allow writes
+        lines += ['(deny file-write*', subpaths(allow_ro), ')']
     if allow_rw:
         lines += ['(allow file-read* file-write*', subpaths(allow_rw), ')']
     if deny:
@@ -123,12 +125,12 @@ def _bwrap_args(launcher, home, allow_ro, allow_rw, deny):
     home_p = Path(home)
     args = [launcher, '--die-with-parent', '--dev-bind', '/', '/',
             '--perms', '0111', '--tmpfs', home]
+    # read-only roots are bound read-only wherever they are (also outside home, e.g. a repo under
+    # /local); rw roots come after, so a writable subtree of a read-only root stays writable
     for r in sorted(set(allow_ro)):
-        if home_p in Path(r).parents:
-            args += ['--ro-bind', r, r]
+        args += ['--ro-bind', r, r]
     for r in sorted(set(allow_rw)):
-        if home_p in Path(r).parents:
-            args += ['--bind', r, r]
+        args += ['--bind', r, r]
     for r in sorted(set(deny)):
         if not Path(r).is_dir():
             raise SandboxUnavailable('deny root %s is not a directory' % r)

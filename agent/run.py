@@ -4,17 +4,20 @@
 can only write the solver, with network off, then grade the result authoritatively.
 
   python3 -m agent.run --solver sundance [--model claude-opus-4-8] [--auth auto]
-          [--network off] [--timeout 3600] [--split dev] [--tests] [--no-sandbox] [--tag t1]
+          [--network off] [--timeout 3600] [--tests] [--no-holdout] [--no-sandbox] [--tag t1]
 
 What it does, in order:
   1. resolve auth (api-key / subscription / bedrock / auto)
   2. make a run dir runs/<ts>-<model>-<solver>-<tag>/ and capture provenance
      (solver base commit, task-file hashes, platform, CLI version)
   3. build the FS sandbox (write only to solvers/<solver> + results + build caches;
-     everything else read-only) and the network policy, then launch the agent with
-     the task instruction as its prompt
+     everything else read-only; benchmarks/, .referee/ and runs/ unreadable) and the
+     network policy. The agent sees only the dev split, through a view of the
+     benchmarks (.bench-view/, BENCH_ROOT). Then launch the agent with the task
+     instruction as its prompt
   4. save transcript.jsonl, summary.json, COST.md, result.md, patch.diff
-  5. rebuild + re-measure with the frozen referee (agent/grade.py) -> grade.json
+  5. rebuild + re-measure on dev and holdout with the frozen referee (agent/grade.py)
+     -> grade.json; the headline score is the holdout gap
 
 The agent's self-reported success is logged but never trusted; grade.json decides.
 The stop criterion is the wall-clock --timeout (the task instruction states it so the
@@ -35,6 +38,33 @@ from agent import backend, metrics, sandbox, grade as grading
 ROOT = Path(__file__).resolve().parent.parent
 TASKS = ROOT / 'tasks'
 RUNS = ROOT / 'runs'
+BENCH = ROOT / 'benchmarks'
+VIEW = ROOT / '.bench-view'      # what the agent sees as BENCH_ROOT: only the dev split + canaries
+
+
+def make_dev_view():
+    """(Re)build VIEW with hard links to the dev-split queries and the canaries, keeping the layout
+    of benchmarks/. The sandbox denies benchmarks/ itself, so the holdout split is not visible."""
+    import shutil
+    r = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'bench.py'), 'list', '--split', 'dev',
+                        '--sets', ','.join(grading.SCORED_SETS + ['canaries'])],
+                       cwd=str(ROOT), stdout=subprocess.PIPE, universal_newlines=True, check=True,
+                       env={**os.environ, 'BENCH_ROOT': str(BENCH)})
+    if VIEW.exists():
+        shutil.rmtree(str(VIEW))
+    n = 0
+    for line in r.stdout.splitlines():
+        src = Path(line)
+        dst = VIEW / src.relative_to(BENCH)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(str(src), str(dst))
+        except OSError:
+            shutil.copy2(str(src), str(dst))
+        n += 1
+    if n == 0:
+        sys.exit('no dev queries found; run scripts/fetch_benchmarks.sh --only verus --only canaries')
+    return n
 
 
 def _utcnow():
@@ -108,9 +138,13 @@ def build_policy(solver):
     home = Path.home()
     allow_rw = [ROOT / 'solvers' / solver, ROOT / 'results', home / '.cargo'] + st['allow_rw']
     allow_ro = [ROOT] + st['allow_ro'] + backend.toolchain_ro_paths()
+    # the full benchmark sets, the grader's holdout data, and earlier runs' grades stay hidden
+    hidden = [BENCH, Path(grading.REFEREE), RUNS]
+    for d in hidden:
+        d.mkdir(parents=True, exist_ok=True)
     return sandbox.FsPolicy(allow_rw=tuple(str(p) for p in allow_rw),
                             allow_ro=tuple(str(p) for p in allow_ro),
-                            deny=tuple(str(p) for p in st['deny']))
+                            deny=tuple(str(p) for p in list(st['deny']) + hidden))
 
 
 def main():
@@ -120,7 +154,7 @@ def main():
     ap.add_argument('--auth', default='auto', choices=['auto', 'api-key', 'subscription', 'bedrock'])
     ap.add_argument('--network', default='off', help='off | loopback | on')
     ap.add_argument('--timeout', type=int, default=3600, help='wall-clock budget in seconds (the stop criterion)')
-    ap.add_argument('--split', choices=('dev', 'holdout', 'full'), default='dev', help='grading split')
+    ap.add_argument('--no-holdout', action='store_true', help='grade on dev only (quick; not a final grade)')
     ap.add_argument('--grade-timeout', type=int, default=60, help='per-query timeout when grading')
     ap.add_argument('--tests', action='store_true', help='also run the solver test suite (L2)')
     ap.add_argument('--no-sandbox', action='store_true', help='DANGER: run the agent unconfined')
@@ -155,12 +189,14 @@ def main():
         'run_id': run_dir.name, 'started_at': _utcnow().isoformat(),
         'solver': a.solver, 'config': spec['config'], 'auth_mode': auth_mode,
         'backend': backend.backend_provenance(auth_mode), 'network': net,
-        'sandbox': (not a.no_sandbox), 'timeout_seconds': a.timeout, 'grading_split': a.split,
+        'sandbox': (not a.no_sandbox), 'timeout_seconds': a.timeout, 'grade_holdout': not a.no_holdout,
         'instruction_files': ['tasks/_common.md', str(instr_path.relative_to(ROOT))],
         'task_spec': spec, 'argv_without_prompt': argv,
         'provenance': _provenance(solver_dir, [TASKS / '_common.md', spec_path, instr_path], a.model),
     }
     (run_dir / 'prompt.md').write_text(instruction)   # the exact text the agent saw
+    meta['dev_view_queries'] = make_dev_view()
+    env_override = {**(env_override or {}), 'BENCH_ROOT': str(VIEW)}
     if not a.no_sandbox:
         policy = build_policy(a.solver)
         meta['sandbox_policy'] = policy.provenance()
@@ -195,10 +231,10 @@ def main():
         print('  grading skipped (--no-grade). artifacts in %s' % run_dir)
         return
     print('  grading (rebuild + referee, this runs unsandboxed) ...')
-    verdict = grading.grade(a.solver, spec['config'], split=a.split, timeout=a.grade_timeout,
+    verdict = grading.grade(a.solver, spec['config'], timeout=a.grade_timeout,
                             out_dir=str(run_dir / 'grade'), jobs=a.jobs,
-                            do_build=True, do_tests=a.tests,
-                            baseline_gap=spec.get('baseline', {}).get('%s_mean_gap_pp' % a.split))
+                            do_build=True, do_tests=a.tests, holdout=not a.no_holdout,
+                            baseline=spec.get('baseline', {}))
     (run_dir / 'grade.json').write_text(json.dumps(verdict, indent=2))
     meta['grade'] = verdict
     (run_dir / 'meta.json').write_text(json.dumps(meta, indent=2))
@@ -214,14 +250,15 @@ def _report(v):
     print('\n  === GRADE: %s ===' % v.get('verdict'))
     if 'L1_build' in v and not v['L1_build']['ok']:
         print('  L1 build FAILED'); return
-    if v.get('L4_mean_gap_pp') is not None:
-        line = '  mean gap to Z3: %.2f pp' % v['L4_mean_gap_pp']
+    if v.get('score_gap_pp') is not None:
+        line = '  score: gap to Z3 on %s = %.2f pp' % (v['score_split'], v['score_gap_pp'])
         if 'improvement_pp' in v:
             line += '  (baseline %.2f -> %+.2f improvement)' % (v['baseline_gap_pp'], v['improvement_pp'])
         print(line)
-    for s, st in (v.get('per_set') or {}).items():
-        print('    %-8s solved %5.1f%%  z3 %5.1f%%  gap %5.1f pp' %
-              (s, st['solved_pct'], st['z3_pct'] or 0, st['gap_pp'] or 0))
+    for split in ('dev', 'holdout'):
+        for s, st in ((v.get(split) or {}).get('per_set') or {}).items():
+            print('    %-8s %-8s solved %5.1f%%  z3 %5.1f%%  gap %5.1f pp' %
+                  (split, s, st['solved_pct'], st['z3_pct'] or 0, st['gap_pp'] or 0))
     print('  soundness: %s (%d wrong answers)' % ('VALID' if v.get('L3_valid') else 'INVALID',
                                                   v.get('wrong_answers', 0)))
 

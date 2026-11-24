@@ -31,6 +31,8 @@
     "dev_mean_gap_pp": 17.4,
     "measured": "2026-11-24",
     "split": "dev (splits/verus-dev.txt, 259 Verus queries), 60 s, Z3 5.3.3 = 100.0%",
-    "note": "82.6% solved, all proofs checked"
+    "note": "82.6% solved, all proofs checked",
+    "holdout_mean_gap_pp": 17.22,
+    "holdout_note": "holdout split (2,317 Verus queries): 82.6% solved, Z3 99.8%; measured 2026-11-24 by agent.grade"
   }
 }

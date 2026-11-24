@@ -7,7 +7,7 @@ Look at *why* queries fail before changing anything: group the result CSV rows b
 and cheapest to recover here — Sundance's eDRAT proofs, when it does solve, are almost always accepted, so
 the gap is mostly inputs it never solves rather than proofs the checker rejects.
 
-On the current `main`, a large class of held-out / Dafny / F\* queries fails up front with *"unsupported
+On the current `main`, a large class of Verus-additional / Dafny / F\* queries fails up front with *"unsupported
 theory: real arithmetic"* — Sundance rejects any input containing a `Real`-sorted term, even an unused
 declaration in a prelude (see `src/theory_check.rs`). Making the solver accept and handle such inputs is
 likely the cheapest large win.

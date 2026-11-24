@@ -22,10 +22,10 @@ how to solve a task — it provides the backend, the sandbox, the logging, and t
 python3 scripts/bench.py run z3 --split dev
 
 # run a task (model/auth/network/budget are flags; the stop criterion is --timeout)
-python3 -m agent.run --solver sundance --model claude-opus-4-8 --timeout 3600 --split dev
+python3 -m agent.run --solver sundance --model claude-opus-4-8 --timeout 3600
 
 # grade a solver's current state by hand (same grade run.py does after a task)
-python3 -m agent.grade sundance --split dev
+python3 -m agent.grade sundance          # dev + holdout; --no-holdout for a quick dev-only check
 ```
 
 Auth is auto-detected: `ANTHROPIC_API_KEY` → api-key, else `CLAUDE_CODE_OAUTH_TOKEN` → subscription, else
@@ -60,7 +60,14 @@ The agent-visible instruction is **composed** so the safety-critical rules have 
 
 `run.py` renders these into the exact prompt and saves it to the run dir as `prompt.md`. **`grade.py` is
 not part of the agent's workflow** — the agent self-checks with `bench.py` on `dev`; `grade.py` is the
-referee's post-run judge (read-only to the agent, held-out graded where the agent can't tune to it).
+referee's post-run judge. It runs the dev split and the holdout split; the score is the holdout gap.
+
+## What the agent can see
+
+The agent works only on the dev split. `run.py` builds `.bench-view/`, which holds hard links to the 259 dev
+queries and the canaries, and points the agent at it with `BENCH_ROOT`. The sandbox denies `benchmarks/`
+(so the 2,317 holdout queries cannot be read), `.referee/` (the grader's Z3 holdout reference and its holdout
+runs), and `runs/` (earlier grades). The grader runs outside the sandbox and uses the full `benchmarks/`.
 
 ## Sandbox policy (enforced, not prose)
 

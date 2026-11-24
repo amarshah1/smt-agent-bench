@@ -8,7 +8,7 @@
   bench.py select-canaries CVC5_REGRESS_DIR OUT_DIR         # used by fetch_benchmarks.sh
 
 SOLVER: z3 (reference), sundance, cvc5, alt-ergo, or one of the variants listed in CONFIGS below.
-Sets: verus (2,576 = development set without the SplinterDB copies), heldout (4,086), dafny (11,674),
+Sets: verus (2,576 = development set without the SplinterDB copies), verus-additional (4,086, the paper's held-out set), dafny (11,674),
 fstar (3,195), canaries (satisfiable soundness checks). Only verus is scored for now, so the default is
 verus and the canaries; the other sets run only when you pass them to --sets.
 Splits: for verus, `dev` is the 259 queries in splits/verus-dev.txt (10% of each project) and `holdout` is
@@ -49,12 +49,12 @@ CVC5_CHECKERS = os.environ.get('CHECKERS', 'logos,ethos').split(',')
 
 SETS = {   # name -> (folder, path filter, family)
     'verus': ('verus_benchmarks/UFDTLIA/20241211-verus', lambda r: not r.startswith('anvil/splinterdb-smt-'), 'verus'),
-    'heldout': ('sundance_heldout_benchmarks/UFDTLIA', None, 'verus'),
+    'verus-additional': ('sundance_heldout_benchmarks/UFDTLIA', None, 'verus'),
     'dafny': ('dafny_fstar_benchmarks/UFLIA', lambda r: r.startswith('d_'), 'dafny'),
     'fstar': ('dafny_fstar_benchmarks/UFLIA', lambda r: r.startswith('fs_'), 'fstar'),
     'canaries': ('canaries', None, 'canary'),
 }
-MAIN_SETS = ['verus', 'heldout', 'dafny', 'fstar']
+MAIN_SETS = ['verus', 'verus-additional', 'dafny', 'fstar']
 
 CVC5_STRICT = ['--no-cbqi', '--user-pat=strict']
 CVC5_PROOF = ['--produce-proofs', '--dump-proofs', '--proof-format-mode=cpc', '--proof-granularity=dsl-rewrite']
