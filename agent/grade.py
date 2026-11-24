@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Authoritative grading of a solver's current state. This is the single source
+of truth for "is it better" — it runs OUTSIDE the agent sandbox, rebuilds the
+solver from its current source, and re-measures with the frozen referee
+(`scripts/bench.py` + the proof checkers), exactly as the final evaluation will.
+
+The agent's own self-checks during a run are advisory; only this post-hoc grade
+counts.
+
+Verdict ladder (mapped to this benchmark's rules, see TASK.md):
+  L1 build     scripts/fetch_solvers.sh <solver> succeeds
+  L2 tests     the solver's own test suite passes (optional; --tests)
+  L3 valid     the dev run has 0 wrong answers and clean canaries (soundness gate)
+  L4 gap       mean gap-to-Z3 over the four sets (the headline score; lower is better)
+  L5 heldout   held-out generalizes + canaries clean (optional; grade --split full)
+
+A run that fails L3 is INVALID regardless of its gap (an unsound answer scores 0).
+"""
+import json
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MAIN_SETS = ['verus', 'heldout', 'dafny', 'fstar']
+
+
+def _run(cmd, **kw):
+    return subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          universal_newlines=True, **kw)
+
+
+def rebuild(solver, log_path=None, jobs=None):
+    """L1: rebuild the solver from its current source via the frozen build script
+    (keeps the agent's edits; no --update, so no upstream pull)."""
+    env = dict(os.environ)
+    env.setdefault('JOBS', str(jobs or (os.cpu_count() or 4)))
+    bash = env.get('BENCH_BASH', 'bash')
+    r = _run([bash, os.path.join('scripts', 'fetch_solvers.sh'), solver], env=env)
+    if log_path:
+        open(log_path, 'w').write(r.stdout)
+    return {'ok': r.returncode == 0, 'returncode': r.returncode, 'tail': r.stdout[-800:]}
+
+
+TEST_CMDS = {
+    'sundance': ['cargo', 'test', '--release', '--no-default-features', '--features', 'minisat'],
+    'cvc5': ['ctest', '--test-dir', 'build', '-j4'],
+    'alt-ergo': ['dune', 'test'],
+}
+
+
+def run_tests(solver, log_path=None):
+    """L2: the solver's own test suite (TASK rule 6). Best-effort; skipped if the
+    command is not available."""
+    cmd = TEST_CMDS.get(solver)
+    if not cmd:
+        return {'ok': None, 'note': 'no test command configured'}
+    d = os.path.join(ROOT, 'solvers', solver)
+    try:
+        r = subprocess.run(cmd, cwd=d, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True)
+    except OSError as e:
+        return {'ok': None, 'note': 'cannot run tests: %s' % e}
+    if log_path:
+        open(log_path, 'w').write(r.stdout)
+    return {'ok': r.returncode == 0, 'returncode': r.returncode, 'tail': r.stdout[-800:]}
+
+
+def _score_json(run_out, ref):
+    r = _run([sys.executable, os.path.join('scripts', 'bench.py'), 'score', run_out,
+              '--ref', ref, '--json'])
+    try:
+        return json.loads(r.stdout)[0]
+    except (json.JSONDecodeError, IndexError, KeyError):
+        raise RuntimeError('bench.py score failed:\n' + r.stdout[-1200:])
+
+
+def measure(solver, config, *, split='dev', timeout=60, out_dir, jobs=None, sets=None):
+    """L3/L4: run the solver with the frozen referee and score against Z3. Returns
+    the per-set stats, the mean gap-to-Z3, and the soundness verdict."""
+    ref = os.path.join(ROOT, 'results', 'z3-%s-t%d' % (split, timeout))
+    if not os.path.isdir(ref):
+        raise RuntimeError('missing Z3 reference %s — run: python3 scripts/bench.py run z3 --split %s'
+                           % (ref, split))
+    sets = sets or (MAIN_SETS + ['canaries'])
+    cmd = [sys.executable, os.path.join('scripts', 'bench.py'), 'run', config,
+           '--split', split, '--timeout', str(timeout), '--out', out_dir, '--rerun',
+           '--sets', ','.join(sets)]
+    if jobs:
+        cmd += ['-j', str(jobs)]
+    run = _run(cmd)
+    row = _score_json(out_dir, ref)
+    gaps = []
+    per_set = {}
+    for s in MAIN_SETS:
+        st = row['sets'].get(s)
+        if not st or not st.get('n'):
+            continue
+        solved = 100.0 * st['solved@%d' % timeout] / st['n']
+        refp = 100.0 * st['ref_solved'] / st['common'] if st.get('common') else None
+        gap = (refp - solved) if refp is not None else None
+        if gap is not None:
+            gaps.append(gap)
+        per_set[s] = {'n': st['n'], 'solved_pct': round(solved, 1),
+                      'z3_pct': round(refp, 1) if refp is not None else None,
+                      'gap_pp': round(gap, 1) if gap is not None else None,
+                      'proof_rejected': st.get('rejected', 0), 'proof_unchecked': st.get('unchecked', 0)}
+    canary = row['sets'].get('canaries', {})
+    return {'valid': row['valid'], 'wrong': row['wrong'],
+            'mean_gap_pp': round(sum(gaps) / len(gaps), 2) if gaps else None,
+            'per_set': per_set, 'canaries': canary,
+            'solver_run_tail': run.stdout[-600:]}
+
+
+def grade(solver, config, *, split='dev', timeout=60, out_dir, jobs=None,
+          do_build=True, do_tests=False, baseline_gap=None):
+    """Full L1->L4(+L5) grade. Returns a verdict dict suitable for grade.json."""
+    v = {'solver': solver, 'config': config, 'split': split, 'timeout': timeout}
+    if do_build:
+        v['L1_build'] = rebuild(solver, os.path.join(out_dir, 'build.log'), jobs)
+        if not v['L1_build']['ok']:
+            v['verdict'] = 'BUILD_FAILED'
+            return v
+    if do_tests:
+        v['L2_tests'] = run_tests(solver, os.path.join(out_dir, 'tests.log'))
+    m = measure(solver, config, split=split, timeout=timeout,
+                out_dir=os.path.join(out_dir, 'eval'), jobs=jobs)
+    v['L3_valid'] = m['valid']
+    v['L4_mean_gap_pp'] = m['mean_gap_pp']
+    v['per_set'] = m['per_set']
+    v['canaries'] = m['canaries']
+    v['wrong_answers'] = m['wrong']
+    if baseline_gap is not None and m['mean_gap_pp'] is not None:
+        v['baseline_gap_pp'] = baseline_gap
+        v['improvement_pp'] = round(baseline_gap - m['mean_gap_pp'], 2)   # positive = better
+    v['verdict'] = ('INVALID' if not m['valid'] else
+                    'OK' if m['mean_gap_pp'] is not None else 'NO_SCORE')
+    return v
+
+
+if __name__ == '__main__':
+    import argparse
+    ap = argparse.ArgumentParser(description='Authoritatively grade a solver (rebuild + referee).')
+    ap.add_argument('solver', choices=['sundance', 'cvc5', 'alt-ergo'])
+    ap.add_argument('--config', help='bench.py config (default: same as solver)')
+    ap.add_argument('--split', choices=('dev', 'full'), default='dev')
+    ap.add_argument('--timeout', type=int, default=60)
+    ap.add_argument('--out', default=None, help='output dir (default: results/grade-<solver>-<split>)')
+    ap.add_argument('--jobs', type=int, default=None)
+    ap.add_argument('--no-build', action='store_true')
+    ap.add_argument('--tests', action='store_true')
+    a = ap.parse_args()
+    out = a.out or os.path.join(ROOT, 'results', 'grade-%s-%s' % (a.solver, a.split))
+    os.makedirs(os.path.join(out, 'eval'), exist_ok=True)
+    verdict = grade(a.solver, a.config or a.solver, split=a.split, timeout=a.timeout,
+                    out_dir=out, jobs=a.jobs, do_build=not a.no_build, do_tests=a.tests)
+    open(os.path.join(out, 'grade.json'), 'w').write(json.dumps(verdict, indent=2))
+    print(json.dumps(verdict, indent=2))

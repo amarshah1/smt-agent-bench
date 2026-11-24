@@ -1,0 +1,23 @@
+{
+  "solver": "sundance",
+  "config": "sundance",
+  "language": "Rust, ~14k lines",
+  "bin": "sundance-smt",
+  "build_cmd": "cargo build --release --no-default-features --features minisat  (run inside solvers/sundance)",
+  "test_cmd": "cargo test --release --no-default-features --features minisat",
+  "solved_condition": "A query counts as solved only when Sundance answers `unsat` **and emits an eDRAT proof that the checker (`edrat-check/`) accepts**. An `unsat` without an accepted proof does not count. See a proof with `edrat-check/edrat_check.py QUERY PROOF -v`.",
+  "canary": "SMT-AGENT-BENCH-CANARY 44c0935f-73f5-40d5-83f6-843f6021fcbd",
+  "scored_sets": ["verus", "heldout", "dafny", "fstar"],
+  "metric": "mean gap to Z3 in percentage points over the four sets (lower is better; 0 = as good as Z3)",
+  "anchors": {
+    "zero": "the unmodified solver at solver_base_commit (the starting point)",
+    "one": "Z3 with the verifier's options (the reference; its internals are not provided)"
+  },
+  "writable": ["solvers/sundance", "results"],
+  "frozen": ["scripts", "edrat-check", "config.env", "benchmarks", "tools", "bin/z3"],
+  "baseline": {
+    "dev_mean_gap_pp": 62.5,
+    "measured": "2026-11-24",
+    "note": "on the --sample 20 dev split (~2 queries per set); sample-sensitive, directional only. Re-measure with a larger sample or --split full for a stable baseline."
+  }
+}

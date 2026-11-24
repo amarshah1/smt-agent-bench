@@ -1,0 +1,25 @@
+{
+  "solver": "alt-ergo",
+  "config": "alt-ergo",
+  "language": "OCaml",
+  "bin": "alt-ergo",
+  "build_cmd": "dune build @install  (run inside solvers/alt-ergo with its local opam switch active: eval $(opam env --switch=. --set-switch))",
+  "test_cmd": "dune test",
+  "solved_condition": "A query counts as solved when Alt-Ergo answers `unsat` within the time limit. Alt-Ergo produces no proofs, so there is no proof check — the soundness canaries (satisfiable queries that must never be answered `unsat`) are what keep it honest. The query is first rewritten from z3-dialect to standard SMT-LIB by `scripts/prep_smtlib.py` (part of the frozen referee); the solver sees that rewritten input.",
+  "canary": "SMT-AGENT-BENCH-CANARY 2e864740-dd8a-4d0e-8d6e-675776ee316e",
+  "scored_sets": ["verus", "heldout", "dafny", "fstar"],
+  "metric": "mean gap to Z3 in percentage points over the four sets (lower is better; 0 = as good as Z3)",
+  "anchors": {
+    "zero": "the unmodified solver at solver_base_commit (the starting point)",
+    "one": "Z3 with the verifier's options (the reference; its internals are not provided)"
+  },
+  "writable": ["solvers/alt-ergo", "results"],
+  "frozen": ["scripts", "edrat-check", "config.env", "benchmarks", "tools", "bin/z3"],
+  "baseline": {
+    "dev_mean_gap_pp": 25.0,
+    "measured": "2026-11-24",
+    "ref": "alt-ergo next (dev build)",
+    "note": "on the --sample 20 dev split (~2 queries per set); sample-sensitive, directional only. Re-measure with a larger sample or --split full for a stable baseline."
+  },
+  "license_note": "The config.env default ALTERGO_REF=next is under the OCamlPro Non-Commercial License. Use ALTERGO_REF=v2.4.3-free (CeCILL-C, the paper's version) for open/commercial use; that release needs scripts/prep_smtlib.py --legacy-ae."
+}
