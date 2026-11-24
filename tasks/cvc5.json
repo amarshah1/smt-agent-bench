@@ -28,9 +28,9 @@
     "bin/z3"
   ],
   "baseline": {
-    "dev_mean_gap_pp": 95.0,
+    "dev_mean_gap_pp": 10.4,
     "measured": "2026-11-24",
     "split": "dev (splits/verus-dev.txt, 259 Verus queries), 60 s, Z3 5.3.3 = 100.0%",
-    "note": "only 5.0% counted: cvc5 answers unsat on 89.6% (232/259) but 219 proofs are unchecked (define-fun lambdas / sort `Type`; see README)"
+    "note": "89.6% solved: 13 proofs checked by Logos, 219 by the Ethos fallback (Logos cannot read the lambdas from define-funs)"
   }
 }

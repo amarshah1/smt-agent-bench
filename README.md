@@ -90,21 +90,14 @@ The newest versions start in a different place:
 - **Sundance `main`** (since PR #251) rejects every input that contains a `Real`-sorted term, including
   unused declarations in a prelude. This rejects nearly all held-out, Dafny and F\* queries
   ("unsupported theory: real arithmetic"). The paper's commit was `c175059`.
-- **cvc5 proofs on Verus are mostly uncheckable.** On the dev split, cvc5 answers `unsat` on 232 of 259
-  queries, but 219 of those proofs cannot be checked, so only 13 (5.0%) count. Two causes:
-  1. Logos has no representation for `lambda`. cvc5 keeps every `define-fun` with arguments as a lambda term
-     in the proof. It prints the term as `(define f () (let ((_let_1 (@var "c" T))) (lambda ...)))` and uses
-     it in later steps, for example `(= f @t422)` and `(_ @t422 x)`. The print form comes from
-     `src/smt/print_benchmark.cpp`: the proof converter rewrites the lambda before the printer splits off its
-     parameters.
-  2. Ethos, the fallback, rejects the sort name `Type` (reserved in Eunoia), which Verus declares. It also
-     fails on the `let`-wrapped `define`.
-
-  Experiment: I rewrote the 219 inputs with every parameterized `define-fun` inlined and `Type` renamed
-  (both are semantics-preserving). On the rewritten inputs, all 219 proofs check: Logos accepts 213, and
-  Ethos accepts the other 6, which took Logos more than 300 s (one took 486 s). So the gap is in what cvc5
-  emits, not in its reasoning. The fix belongs in cvc5: expand macros before proof production, and print
-  or rename reserved symbols. The checkers stay frozen.
+- **Logos cannot check most of cvc5's Verus proofs; Ethos can.** On the dev split, cvc5 answers `unsat` on
+  232 of 259 queries. Logos accepts 13 of those proofs, and Ethos (the fallback) accepts the other 219, so
+  cvc5 scores 89.6%. The reason is that SMT-LIB `define-fun`s with arguments are lambdas in CPC. cvc5 prints
+  them as `(define f () (lambda ...))` and expands them in the proof with `refl`, `ho_cong` and
+  `beta-reduce`. That is how CPC is meant to work, but Logos has no representation for `lambda` (its
+  `docs/parser.md` says so). With the `define-fun`s inlined in the input, Logos accepts all of these proofs,
+  though it takes up to about 500 s on proofs of a few MB. If only Logos (the verified checker) should
+  count, use `CHECKERS=logos`; cvc5 then scores 5.0%.
 - Z3 5.x has a built-in `List` sort, so queries that declare `List` fail in Z3. The eDRAT checker then falls
   back to RUP for the affected lemmas.
 - Alt-Ergo `next`/2.6.x is under the **OCamlPro Non-Commercial License**, not open source. Check that the

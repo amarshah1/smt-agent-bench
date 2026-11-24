@@ -44,6 +44,8 @@ EDRAT_CHECK = os.path.join(ROOT, 'edrat-check', 'edrat_check.py')
 PREP = os.path.join(ROOT, 'scripts', 'prep_smtlib.py')
 CPC_SIG = os.path.join(ROOT, 'tools', 'cpc-signature', 'proofs', 'eo')
 CHECKED = ('VERIFIED', 'VERIFIED-ETHOS')
+# cvc5 proof checkers: Logos first, then Ethos for proofs Logos cannot read. CHECKERS=logos: Logos only.
+CVC5_CHECKERS = os.environ.get('CHECKERS', 'logos,ethos').split(',')
 
 SETS = {   # name -> (folder, path filter, family)
     'verus': ('verus_benchmarks/UFDTLIA/20241211-verus', lambda r: not r.startswith('anvil/splinterdb-smt-'), 'verus'),
@@ -242,7 +244,7 @@ def check_proof(cfg, query, proof, timeout, work):
         if rc is None:
             verdict = 'TIMEOUT'
         note = err.strip()[-200:].replace('\n', ' ') if verdict != 'VERIFIED' else ''
-        if verdict in ('ERROR', 'INCOMPLETE', 'TIMEOUT') and os.path.exists(b('ethos')) and os.path.isdir(CPC_SIG):
+        if verdict in ('ERROR', 'INCOMPLETE', 'TIMEOUT') and 'ethos' in CVC5_CHECKERS and os.path.exists(b('ethos')) and os.path.isdir(CPC_SIG):
             # Logos cannot parse this proof (or it is outside Logos's SMT-LIB model): fall back to Ethos
             ev, es, enote = check_ethos(proof, max(1, timeout - secs), work)
             return ev, round(secs + es, 3), 'logos: %s %s; ethos: %s' % (verdict, note, enote)
@@ -251,7 +253,8 @@ def check_proof(cfg, query, proof, timeout, work):
 
 
 def check_ethos(proof, timeout, work):
-    f = os.path.join(work, 'proof.eo')
+    # not *.eo: Ethos reads .eo files as signatures, where `let` and `Type` are not available
+    f = os.path.join(work, 'proof-with-signature.cpc')
     with open(f, 'w') as g, open(proof) as p:
         g.write('(include "%s/cpc/Cpc.eo")\n(include "%s/cpc/expert/CpcExpert.eo")\n' % (CPC_SIG, CPC_SIG))
         shutil.copyfileobj(p, g)
